@@ -1,16 +1,16 @@
 FROM node:18-alpine
-
 WORKDIR /app
 
-# Install Prisma dependencies
-# RUN apk add --no-cache openssl
+# Copiar únicamente los archivos de dependencias
+COPY package*.json ./
 
+# Instalar dependencias
 RUN npm install
 
+# Copiar el resto del código
 COPY . .
 
-
-# Build the application
+# Build de la aplicación
 RUN npm run build
 
 ENV NODE_ENV=production
