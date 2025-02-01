@@ -3,7 +3,7 @@ FROM node:18-alpine
 WORKDIR /app
 
 # Install Prisma dependencies
-RUN apk add --no-cache openssl
+# RUN apk add --no-cache openssl
 
 RUN npm install
 
