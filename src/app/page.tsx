@@ -52,15 +52,6 @@ export default function Home() {
   // Estado para almacenar el valor adicional modificado para cada fila (mes)
   const [additionalValues, setAdditionalValues] = useState<Record<number, number>>({});
 
-  const [isDarkMode, setIsDarkMode] = useState(false);
-
-  useEffect(() => {
-    const currentTheme = localStorage.getItem("theme");
-    if (currentTheme) {
-      setIsDarkMode(currentTheme === "dark");
-    }
-  }, []);
-
   // Cada vez que se modifiquen los valores adicionales, se recalcula la tabla
   useEffect(() => {
     if (tablaAmortizacion.length > 0) {
@@ -68,13 +59,6 @@ export default function Home() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [additionalValues]);
-
-  const toggleTheme = () => {
-    const newTheme = isDarkMode ? "light" : "dark";
-    setIsDarkMode(!isDarkMode);
-    localStorage.setItem("theme", newTheme);
-    document.documentElement.setAttribute("data-theme", newTheme);
-  };
 
   // Manejo de cambios en los inputs del formulario (incluyendo checkbox)
   const handleChange = (
