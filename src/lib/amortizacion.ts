@@ -76,12 +76,12 @@ export function generarTablaAmortizacion(
     : null;
 
   for (let mes = 1; mes <= mesesRestantes; mes++) {
+    // Formato manual de fecha — evita el coste de Intl.DateTimeFormat por fila
     const currentDate = new Date(startYear, startMonth + mes - 1, 1);
-    const fecha = currentDate.toLocaleDateString("es-ES", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    });
+    const d = String(currentDate.getDate()).padStart(2, "0");
+    const m = String(currentDate.getMonth() + 1).padStart(2, "0");
+    const a = currentDate.getFullYear();
+    const fecha = `${d}/${m}/${a}`;
 
     // Determinar el valor adicional para este mes
     let additional = 0;

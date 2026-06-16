@@ -119,3 +119,20 @@ html {
     @apply block mb-1.5 text-sm font-medium text-foreground/80;
   }
 }
+
+/* ── Animación de filas de tabla (sustituye motion.tr de framer-motion) ── */
+@keyframes table-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.table-row-animate {
+  animation: table-row-in 0.25s ease-out both;
+}
+

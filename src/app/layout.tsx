@@ -41,7 +41,7 @@ export const metadata: Metadata = {
     siteName: "Calculadora de Amortización de Hipoteca",
     images: [
       {
-        url: "/og-image.png",
+        url: "/og-image",
         width: 1200,
         height: 630,
         alt: "Calculadora de Amortización de Hipoteca",
@@ -53,7 +53,7 @@ export const metadata: Metadata = {
     title: "Calculadora de Amortización de Hipoteca",
     description:
       "Simula la amortización de tu hipoteca con pagos adicionales.",
-    images: ["/og-image.png"],
+    images: ["/og-image"],
   },
 };
 
@@ -67,6 +67,30 @@ export default function RootLayout({
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "WebApplication",
+              name: "Calculadora de Amortización de Hipoteca",
+              url: "https://calculadora-hipoteca.vercel.app",
+              description:
+                "Calcula la amortización de tu hipoteca con el sistema francés. Simula pagos adicionales, compara reducir cuota vs plazo, y obtén una tabla detallada mes a mes.",
+              applicationCategory: "FinanceApplication",
+              operatingSystem: "Web",
+              offers: {
+                "@type": "Offer",
+                price: "0",
+                priceCurrency: "EUR",
+              },
+              inLanguage: "es",
+            }),
+          }}
+        />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}

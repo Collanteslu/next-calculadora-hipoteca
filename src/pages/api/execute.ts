@@ -1,9 +1,11 @@
 import { NextApiRequest, NextApiResponse } from "next";
 
+const ALLOWED_METHODS = ["POST"] as const;
+
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") {
-    res.setHeader("Allow", ["POST"]);
-    return res.status(405).end(`Method ${req.method} Not Allowed`);
+  if (!ALLOWED_METHODS.includes(req.method as (typeof ALLOWED_METHODS)[number])) {
+    res.setHeader("Allow", ALLOWED_METHODS);
+    return res.status(405).json({ error: "Method Not Allowed" });
   }
 
   // Esta ruta está preparada para futura lógica de servidor.
