@@ -14,8 +14,34 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Amortización de Hipoteca",
-  description: "Calculadora de amortización de hipoteca",
+  title: "Calculadora de Amortización de Hipoteca | Simulador Financiero",
+  description:
+    "Calcula la amortización de tu hipoteca con el sistema francés. Simula pagos adicionales, compara reducir cuota vs plazo, y obtén una tabla detallada mes a mes. Gratuito y sin registro.",
+  keywords: [
+    "amortización",
+    "hipoteca",
+    "calculadora hipoteca",
+    "sistema francés",
+    "simulador hipotecario",
+    "tabla amortización",
+    "calcular cuota hipoteca",
+  ],
+  authors: [{ name: "Calculadora Hipoteca" }],
+  openGraph: {
+    title: "Calculadora de Amortización de Hipoteca",
+    description:
+      "Simula la amortización de tu hipoteca con pagos adicionales y obtén una tabla detallada.",
+    type: "website",
+    locale: "es_ES",
+    siteName: "Calculadora de Amortización de Hipoteca",
+  },
+  twitter: {
+    card: "summary",
+    title: "Calculadora de Amortización de Hipoteca",
+    description:
+      "Simula la amortización de tu hipoteca con pagos adicionales.",
+  },
+  robots: { index: true, follow: true },
 };
 
 export default function RootLayout({
@@ -24,7 +50,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="es" suppressHydrationWarning>
+      <head>
+        <meta charSet="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

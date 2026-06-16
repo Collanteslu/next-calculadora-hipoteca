@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
+import { useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -11,6 +10,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ModeToggle } from "@/components/ui/toggle-theme";
+import { motion, AnimatePresence } from "framer-motion";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 // Definición de tipos
 interface FormData {
@@ -51,14 +53,31 @@ export default function Home() {
 
   // Estado para almacenar el valor adicional modificado para cada fila (mes)
   const [additionalValues, setAdditionalValues] = useState<Record<number, number>>({});
+  const [calculando, setCalculando] = useState(false);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(12);
+  const pageSizeOptions = [12, 24, 50, 100];
+  const tablaRef = useRef<HTMLDivElement>(null);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Cada vez que se modifiquen los valores adicionales, se recalcula la tabla
+  const paginatedData = tablaAmortizacion.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
+  const totalPages = Math.max(1, Math.ceil(tablaAmortizacion.length / pageSize));
+
+  // Auto-calcular con debounce al cambiar formulario o adicionales por fila
   useEffect(() => {
-    if (tablaAmortizacion.length > 0) {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
       calcularAmortizacion();
-    }
+    }, 400);
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [additionalValues]);
+  }, [formData, additionalValues]);
 
   // Manejo de cambios en los inputs del formulario (incluyendo checkbox)
   const handleChange = (
@@ -70,6 +89,13 @@ export default function Home() {
     const value =
       target.type === "checkbox" ? (target as HTMLInputElement).checked : target.value;
     const { name } = target;
+
+    // Limpiar error del campo que se está editando
+    setFormErrors((prev) => {
+      const nuevo = { ...prev };
+      delete nuevo[name];
+      return nuevo;
+    });
 
     setFormData((prevData) => ({
       ...prevData,
@@ -88,8 +114,23 @@ export default function Home() {
     return (importe * interesMensual) / (1 - Math.pow(1 + interesMensual, -meses));
   };
 
+  // Validación del formulario
+  const validarFormulario = (): boolean => {
+    const errores: Record<string, string> = {};
+    if (formData.importeInicial <= 0) errores.importeInicial = "Debe ser mayor que 0";
+    if (formData.interesAnual < 0) errores.interesAnual = "No puede ser negativo";
+    if (formData.mesesRestantes <= 0) errores.mesesRestantes = "Debe ser mayor que 0";
+    if (formData.amortizacionAdicional < 0) errores.amortizacionAdicional = "No puede ser negativo";
+    setFormErrors(errores);
+    return Object.keys(errores).length === 0;
+  };
+
   // Función para calcular la tabla de amortización
   const calcularAmortizacion = () => {
+    // Limpiar el timer de auto-cálculo para evitar duplicados
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    if (!validarFormulario()) return;
+    setCalculando(true);
     const {
       importeInicial,
       interesAnual,
@@ -181,6 +222,8 @@ export default function Home() {
 
     setTablaAmortizacion(tabla);
     setTotalInteresesPagados(totalIntereses.toFixed(2));
+    setCurrentPage(1);
+    setCalculando(false);
   };
 
   // Maneja el cambio en el input de amortización adicional para cada fila (mes)
@@ -192,67 +235,193 @@ export default function Home() {
     // El useEffect se encargará de recalcular la tabla al actualizar additionalValues.
   };
 
+  // Reiniciar formulario
+  const resetFormulario = () => {
+    setFormData({
+      importeInicial: 100000,
+      interesAnual: 3,
+      mesesRestantes: 120,
+      amortizacionAdicional: 0,
+      tipoAmortizacion: "puntual",
+      reducir: "cuota",
+      mantenerPagoConstante: false,
+    });
+    setTablaAmortizacion([]);
+    setTotalInteresesPagados("0");
+    setAdditionalValues({});
+    setFormErrors({});
+    setCurrentPage(1);
+  };
+
+  // Exportar a CSV
+  const exportarCSV = () => {
+    const encabezados = [
+      "Mes,Fecha,Cuota,Intereses,Amortización,Amort. Adicional,Saldo Pendiente,Intereses Acumulados",
+    ];
+    const filas = tablaAmortizacion.map(
+      (f) =>
+        `${f.mes},${f.fecha},${f.cuota},${f.intereses},${f.amortizacion},${f.amortizacionAdicional},${f.saldoPendiente},${f.interesesAcumulados}`
+    );
+    const csv = [...encabezados, ...filas].join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `amortizacion_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Exportar a PDF
+  const exportarPDF = () => {
+    const doc = new jsPDF("landscape", "mm", "a4");
+    doc.setFontSize(16);
+    doc.text("Tabla de Amortización de Hipoteca", 14, 15);
+    doc.setFontSize(10);
+    doc.text(
+      `Importe: ${formData.importeInicial}€ | Interés: ${formData.interesAnual}% | Plazo: ${formData.mesesRestantes} meses`,
+      14,
+      22
+    );
+
+    const columnas = [
+      "Mes",
+      "Fecha",
+      "Cuota",
+      "Intereses",
+      "Amortización",
+      "Amort. Adic.",
+      "Saldo Pend.",
+      "Int. Acum.",
+    ];
+    const datos = tablaAmortizacion.map((f) => [
+      f.mes,
+      f.fecha,
+      f.cuota,
+      f.intereses,
+      f.amortizacion,
+      f.amortizacionAdicional,
+      f.saldoPendiente,
+      f.interesesAcumulados,
+    ]);
+
+    autoTable(doc, {
+      head: [columnas],
+      body: datos,
+      startY: 28,
+      theme: "grid",
+      styles: { fontSize: 7 },
+      headStyles: { fillColor: [16, 185, 129] },
+    });
+
+    doc.save(`amortizacion_${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
+
+  // Cambiar página
+  const irPagina = (pagina: number) => {
+    if (pagina >= 1 && pagina <= totalPages) {
+      setCurrentPage(pagina);
+      tablaRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors">
-      <div className="container mx-auto p-6">
-        {/* Encabezado y Toggle de Tema */}
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-4xl font-extrabold">
-            Calculadora de Amortización de Hipoteca
-          </h1>
-          <ModeToggle/>
-        </div>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.4 }}
+      className="min-h-screen bg-gradient-to-br from-background via-background to-emerald-50/30 dark:from-background dark:via-background dark:to-emerald-950/20 transition-colors"
+    >
+      <div className="container mx-auto p-4 md:p-8 max-w-6xl">
+        {/* Encabezado */}
+        <motion.div
+          initial={{ y: -10, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.5 }}
+          className="flex justify-between items-center mb-8 md:mb-10"
+        >
+          <div>
+            <div className="h-1 w-16 bg-primary rounded-full mb-3" />
+            <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground">
+              Calculadora de Amortización
+            </h1>
+            <p className="text-muted-foreground text-sm mt-1">
+              Simula tu hipoteca al instante — sistema francés
+            </p>
+          </div>
+          <ModeToggle />
+        </motion.div>
 
         {/* Tarjeta del Formulario */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-8">
-          <h2 className="text-2xl font-semibold mb-4">Datos de la Hipoteca</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="card-premium p-6 md:p-8 mb-8"
+        >
+          <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
+            <span className="inline-block w-2 h-5 bg-primary rounded-full" />
+            Datos de la Hipoteca
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
-              <label className="block mb-2 font-medium">
-                Importe Inicial Pendiente (€):
+              <label className="label-form">
+                Importe Inicial Pendiente
               </label>
               <Input
                 type="number"
                 name="importeInicial"
                 value={formData.importeInicial}
                 onChange={handleChange}
-                className="w-full"
+                className={`input-field ${formErrors.importeInicial ? "border-destructive" : ""}`}
               />
+              {formErrors.importeInicial && (
+                <p className="text-destructive text-xs mt-1">{formErrors.importeInicial}</p>
+              )}
             </div>
             <div>
-              <label className="block mb-2 font-medium">Interés Anual (%):</label>
+              <label className="label-form">Interés Anual</label>
               <Input
                 type="number"
                 name="interesAnual"
                 value={formData.interesAnual}
                 onChange={handleChange}
-                className="w-full"
+                className={`input-field ${formErrors.interesAnual ? "border-destructive" : ""}`}
               />
+              {formErrors.interesAnual && (
+                <p className="text-destructive text-xs mt-1">{formErrors.interesAnual}</p>
+              )}
             </div>
             <div>
-              <label className="block mb-2 font-medium">Meses Restantes:</label>
+              <label className="label-form">Meses Restantes</label>
               <Input
                 type="number"
                 name="mesesRestantes"
                 value={formData.mesesRestantes}
                 onChange={handleChange}
-                className="w-full"
+                className={`input-field ${formErrors.mesesRestantes ? "border-destructive" : ""}`}
               />
+              {formErrors.mesesRestantes && (
+                <p className="text-destructive text-xs mt-1">{formErrors.mesesRestantes}</p>
+              )}
             </div>
             <div>
-              <label className="block mb-2 font-medium">
-                Amortización Adicional (valor por defecto) (€):
+              <label className="label-form">
+                Amortización Adicional (por defecto)
               </label>
               <Input
                 type="number"
                 name="amortizacionAdicional"
                 value={formData.amortizacionAdicional}
                 onChange={handleChange}
-                className="w-full"
+                className={`input-field ${formErrors.amortizacionAdicional ? "border-destructive" : ""}`}
               />
+              {formErrors.amortizacionAdicional && (
+                <p className="text-destructive text-xs mt-1">{formErrors.amortizacionAdicional}</p>
+              )}
             </div>
             <div>
-              <label className="block mb-2 font-medium">Tipo de Amortización:</label>
+              <label className="label-form">Tipo de Amortización</label>
               <Select
                 name="tipoAmortizacion"
                 value={formData.tipoAmortizacion}
@@ -260,7 +429,7 @@ export default function Home() {
                   handleChange({ target: { name: "tipoAmortizacion", value } })
                 }
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="input-field">
                   <SelectValue placeholder="Selecciona..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -271,7 +440,7 @@ export default function Home() {
               </Select>
             </div>
             <div>
-              <label className="block mb-2 font-medium">¿Qué deseas reducir?</label>
+              <label className="label-form">Reducir</label>
               <Select
                 name="reducir"
                 value={formData.reducir}
@@ -279,59 +448,111 @@ export default function Home() {
                   handleChange({ target: { name: "reducir", value } })
                 }
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="input-field">
                   <SelectValue placeholder="Selecciona..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cuota">Cuota</SelectItem>
-                  <SelectItem value="plazo">Plazo</SelectItem>
+                  <SelectItem value="cuota">Cuota mensual</SelectItem>
+                  <SelectItem value="plazo">Plazo total</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-center">
+            <div className="flex items-center gap-3 pt-2">
               <Input
+                id="mantenerPagoConstante"
                 type="checkbox"
                 name="mantenerPagoConstante"
                 checked={formData.mantenerPagoConstante}
                 onChange={handleChange}
-                className="mr-2"
+                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
               />
-              <label className="font-medium">
+              <label htmlFor="mantenerPagoConstante" className="text-sm font-medium cursor-pointer select-none">
                 Mantener el pago total constante
               </label>
             </div>
           </div>
-          <div className="mt-6 text-right">
-            <Button
+          <div className="mt-8 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
+            <div className="flex items-center gap-3 order-2 sm:order-1">
+              <button onClick={resetFormulario} type="button" className="btn-secondary text-sm">
+                Reiniciar
+              </button>
+              {tablaAmortizacion.length > 0 && (
+                <span className="text-xs text-muted-foreground hidden sm:inline">
+                  {calculando ? "Calculando…" : "Actualizado ⏎"}
+                </span>
+              )}
+            </div>
+            <button
               onClick={calcularAmortizacion}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded"
+              disabled={calculando}
+              type="button"
+              className="btn-primary text-base order-1 sm:order-2"
             >
-              Calcular
-            </Button>
+              {calculando ? (
+                <span className="flex items-center gap-2">
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Calculando…
+                </span>
+              ) : (
+                <span className="flex items-center gap-2">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="23 4 23 10 17 10" />
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                  </svg>
+                  {tablaAmortizacion.length > 0 ? "Actualizar" : "Calcular"}
+                </span>
+              )}
+            </button>
           </div>
-        </div>
+        </motion.div>
 
         {/* Tabla de Resultados */}
+        <AnimatePresence>
         {tablaAmortizacion.length > 0 && (
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-            <h2 className="text-2xl font-semibold mb-4">Tabla de Amortización</h2>
-            <div className="overflow-x-auto">
-              <table className="min-w-full border-collapse">
+          <motion.div
+            ref={tablaRef}
+            key="tabla-resultados"
+            initial={{ y: 30, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="card-premium p-6 md:p-8"
+          >
+            <div className="flex flex-wrap justify-between items-center mb-5 gap-3">
+              <h2 className="text-xl font-semibold flex items-center gap-2">
+                <span className="inline-block w-2 h-5 bg-primary rounded-full" />
+                Tabla de Amortización
+              </h2>
+              <div className="flex gap-2">
+                <button onClick={exportarCSV} type="button" className="btn-secondary text-xs">
+                  CSV
+                </button>
+                <button onClick={exportarPDF} type="button" className="btn-secondary text-xs">
+                  PDF
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-lg border">
+              <table className="min-w-full divide-y">
                 <thead>
-                  <tr className="bg-gray-200 dark:bg-gray-700">
-                    <th className="border p-2">Mes</th>
-                    <th className="border p-2">Fecha</th>
-                    <th className="border p-2">Cuota</th>
-                    <th className="border p-2">Intereses</th>
-                    <th className="border p-2">Amortización</th>
-                    <th className="border p-2">Amort. Adicional</th>
-                    <th className="border p-2">Saldo Pendiente</th>
-                    <th className="border p-2">Intereses Acumulados</th>
+                  <tr className="bg-muted/50">
+                    {["Mes", "Fecha", "Cuota", "Intereses", "Amortización", "Amort. Adic.", "Saldo Pend.", "Int. Acum."].map(
+                      (h) => (
+                        <th
+                          key={h}
+                          className="px-3 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center"
+                        >
+                          {h}
+                        </th>
+                      )
+                    )}
                   </tr>
                 </thead>
-                <tbody>
-                  {tablaAmortizacion.map((fila) => {
-                    // Se determina el valor que se mostrará en el input para este mes:
+                <tbody className="divide-y divide-border">
+                  {paginatedData.map((fila, index) => {
                     const valorInput =
                       additionalValues[fila.mes] !== undefined
                         ? additionalValues[fila.mes]
@@ -343,39 +564,136 @@ export default function Home() {
                               : 0
                           );
                     return (
-                      <tr
+                      <motion.tr
                         key={fila.mes}
-                        className="odd:bg-white even:bg-gray-100 dark:odd:bg-gray-800 dark:even:bg-gray-700"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.15, delay: index * 0.015 }}
+                        className="hover:bg-muted/30 transition-colors"
                       >
-                        <td className="border p-2 text-center">{fila.mes}</td>
-                        <td className="border p-2 text-center">{fila.fecha}</td>
-                        <td className="border p-2 text-right">{fila.cuota}</td>
-                        <td className="border p-2 text-right">{fila.intereses}</td>
-                        <td className="border p-2 text-right">{fila.amortizacion}</td>
-                        <td className="border p-2 text-right">
+                        <td className="px-3 py-2.5 text-sm text-center font-medium">{fila.mes}</td>
+                        <td className="px-3 py-2.5 text-sm text-center text-muted-foreground">{fila.fecha}</td>
+                        <td className="px-3 py-2.5 text-sm text-right font-mono">{fila.cuota}</td>
+                        <td className="px-3 py-2.5 text-sm text-right font-mono text-muted-foreground">{fila.intereses}</td>
+                        <td className="px-3 py-2.5 text-sm text-right font-mono">{fila.amortizacion}</td>
+                        <td className="px-3 py-2.5 text-sm text-right">
                           <input
                             type="number"
                             value={valorInput}
                             onChange={(e) =>
                               handleAdditionalChange(fila.mes, Number(e.target.value))
                             }
-                            className="w-20 text-right p-1 border rounded"
+                            className="w-20 text-right px-2 py-1 text-sm font-mono rounded-md border bg-background focus:ring-2 focus:ring-ring focus:outline-none transition-shadow"
                           />
                         </td>
-                        <td className="border p-2 text-right">{fila.saldoPendiente}</td>
-                        <td className="border p-2 text-right">{fila.interesesAcumulados}</td>
-                      </tr>
+                        <td className="px-3 py-2.5 text-sm text-right font-mono font-medium">{fila.saldoPendiente}</td>
+                        <td className="px-3 py-2.5 text-sm text-right font-mono text-emerald-600 dark:text-emerald-400 font-medium">
+                          {fila.interesesAcumulados}
+                        </td>
+                      </motion.tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
-            <div className="mt-4 text-right text-xl font-bold">
-              Total de Intereses Pagados: {totalInteresesPagados} €
+
+            {/* Paginación */}
+            <div className="flex flex-wrap justify-between items-center gap-3 mt-5">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Filas por página:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="bg-background border rounded-md px-2 py-1 text-xs font-medium text-foreground focus:ring-2 focus:ring-ring focus:outline-none"
+                >
+                  {pageSizeOptions.map((size) => (
+                    <option key={size} value={size}>{size}</option>
+                  ))}
+                  <option value={tablaAmortizacion.length}>Todas</option>
+                </select>
+                <span className="ml-1">
+                  {tablaAmortizacion.length} filas
+                </span>
+              </div>
+
+              {totalPages > 1 && (
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => irPagina(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    type="button"
+                    className="btn-secondary text-xs px-3 py-1.5 disabled:opacity-30"
+                  >
+                    ← Anterior
+                  </button>
+                  <div className="flex items-center gap-1.5">
+                    {Array.from({ length: totalPages }, (_, i) => i + 1)
+                      .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                      .map((p, idx, arr) => (
+                        <span key={p} className="flex items-center gap-1.5">
+                          {idx > 0 && arr[idx - 1] !== p - 1 && (
+                            <span className="text-xs text-muted-foreground">···</span>
+                          )}
+                          <button
+                            onClick={() => irPagina(p)}
+                            type="button"
+                            className={`text-xs font-medium rounded-md w-8 h-8 transition-colors ${
+                              p === currentPage
+                                ? "bg-primary text-primary-foreground"
+                                : "hover:bg-muted text-muted-foreground"
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        </span>
+                      ))}
+                  </div>
+                  <button
+                    onClick={() => irPagina(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    type="button"
+                    className="btn-secondary text-xs px-3 py-1.5 disabled:opacity-30"
+                  >
+                    Siguiente →
+                  </button>
+                </div>
+              )}
             </div>
-          </div>
+
+            {/* Total */}
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.4, delay: 0.3 }}
+              className="mt-6 pt-4 border-t border-border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2"
+            >
+              <span className="text-sm text-muted-foreground">
+                {tablaAmortizacion.length} cuotas simuladas
+              </span>
+              <div className="text-right">
+                <span className="text-sm text-muted-foreground mr-2">Total intereses pagados</span>
+                <span className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                  {totalInteresesPagados} €
+                </span>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
+        </AnimatePresence>
+
+        {/* Footer */}
+        <motion.footer
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, delay: 0.6 }}
+          className="mt-12 text-center text-xs text-muted-foreground/60 pb-4"
+        >
+          Calculadora de amortización — Sistema Francés
+        </motion.footer>
       </div>
-    </div>
+    </motion.div>
   );
 }
