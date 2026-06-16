@@ -14,6 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://calculadora-hipoteca.vercel.app"),
   title: "Calculadora de Amortización de Hipoteca | Simulador Financiero",
   description:
     "Calcula la amortización de tu hipoteca con el sistema francés. Simula pagos adicionales, compara reducir cuota vs plazo, y obtén una tabla detallada mes a mes. Gratuito y sin registro.",
@@ -27,6 +28,10 @@ export const metadata: Metadata = {
     "calcular cuota hipoteca",
   ],
   authors: [{ name: "Calculadora Hipoteca" }],
+  robots: { index: true, follow: true },
+  alternates: {
+    canonical: "https://calculadora-hipoteca.vercel.app",
+  },
   openGraph: {
     title: "Calculadora de Amortización de Hipoteca",
     description:
@@ -34,14 +39,22 @@ export const metadata: Metadata = {
     type: "website",
     locale: "es_ES",
     siteName: "Calculadora de Amortización de Hipoteca",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Calculadora de Amortización de Hipoteca",
+      },
+    ],
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: "Calculadora de Amortización de Hipoteca",
     description:
       "Simula la amortización de tu hipoteca con pagos adicionales.",
+    images: ["/og-image.png"],
   },
-  robots: { index: true, follow: true },
 };
 
 export default function RootLayout({

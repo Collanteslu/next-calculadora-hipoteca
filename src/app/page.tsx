@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -11,33 +11,18 @@ import {
 } from "@/components/ui/select";
 import { ModeToggle } from "@/components/ui/toggle-theme";
 import { motion, AnimatePresence } from "framer-motion";
+
+import {
+  generarTablaAmortizacion,
+  validarDatos,
+  type DatosAmortizacion,
+  type FilaAmortizacion,
+} from "@/lib/amortizacion";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-// Definición de tipos
-interface FormData {
-  importeInicial: number;
-  interesAnual: number;
-  mesesRestantes: number;
-  amortizacionAdicional: number; // valor por defecto para la amortización adicional
-  tipoAmortizacion: "puntual" | "mensual" | "anual";
-  reducir: "cuota" | "plazo";
-  mantenerPagoConstante: boolean;
-}
-
-interface TablaAmortizacion {
-  mes: number;
-  fecha: string;
-  cuota: string;
-  intereses: string;
-  amortizacion: string;
-  amortizacionAdicional: string;
-  saldoPendiente: string;
-  interesesAcumulados: string;
-}
-
 export default function Home() {
-  const [formData, setFormData] = useState<FormData>({
+  const [formData, setFormData] = useState<DatosAmortizacion>({
     importeInicial: 100000,
     interesAnual: 3,
     mesesRestantes: 120,
@@ -48,7 +33,7 @@ export default function Home() {
   });
 
   // Estado para la tabla de amortización calculada
-  const [tablaAmortizacion, setTablaAmortizacion] = useState<TablaAmortizacion[]>([]);
+  const [tablaAmortizacion, setTablaAmortizacion] = useState<FilaAmortizacion[]>([]);
   const [totalInteresesPagados, setTotalInteresesPagados] = useState<string>("0");
 
   // Estado para almacenar el valor adicional modificado para cada fila (mes)
@@ -60,12 +45,20 @@ export default function Home() {
   const pageSizeOptions = [12, 24, 50, 100];
   const tablaRef = useRef<HTMLDivElement>(null);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const exportPdfRef = useRef<(() => Promise<void>) | null>(null);
 
-  const paginatedData = tablaAmortizacion.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize
+  const paginatedData = useMemo(
+    () =>
+      tablaAmortizacion.slice(
+        (currentPage - 1) * pageSize,
+        currentPage * pageSize
+      ),
+    [tablaAmortizacion, currentPage, pageSize]
   );
-  const totalPages = Math.max(1, Math.ceil(tablaAmortizacion.length / pageSize));
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(tablaAmortizacion.length / pageSize)),
+    [tablaAmortizacion.length, pageSize]
+  );
 
   // Auto-calcular con debounce al cambiar formulario o adicionales por fila
   useEffect(() => {
@@ -80,163 +73,65 @@ export default function Home() {
   }, [formData, additionalValues]);
 
   // Manejo de cambios en los inputs del formulario (incluyendo checkbox)
-  const handleChange = (
-    event:
-      | React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
-      | { target: { name: string; value: string | number | boolean } }
-  ) => {
-    const target = event.target as HTMLInputElement | HTMLSelectElement;
-    const value =
-      target.type === "checkbox" ? (target as HTMLInputElement).checked : target.value;
-    const { name } = target;
+  const handleChange = useCallback(
+    (
+      event:
+        | React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+        | { target: { name: string; value: string | number | boolean } }
+    ) => {
+      const target = event.target as HTMLInputElement | HTMLSelectElement;
+      const value =
+        target.type === "checkbox"
+          ? (target as HTMLInputElement).checked
+          : target.value;
+      const { name } = target;
 
-    // Limpiar error del campo que se está editando
-    setFormErrors((prev) => {
-      const nuevo = { ...prev };
-      delete nuevo[name];
-      return nuevo;
-    });
+      setFormErrors((prev) => {
+        const nuevo = { ...prev };
+        delete nuevo[name];
+        return nuevo;
+      });
 
-    setFormData((prevData) => ({
-      ...prevData,
-      [name]: value,
-    }));
-  };
-
-  // Cálculo de la cuota utilizando el sistema francés
-  const calcularCuotaFrances = (
-    importe: number,
-    interesAnual: number,
-    meses: number
-  ): number => {
-    const interesMensual = interesAnual / 100 / 12;
-    if (interesMensual === 0) return importe / meses;
-    return (importe * interesMensual) / (1 - Math.pow(1 + interesMensual, -meses));
-  };
+      setFormData((prevData) => ({
+        ...prevData,
+        [name]: value,
+      }));
+    },
+    []
+  );
 
   // Validación del formulario
-  const validarFormulario = (): boolean => {
-    const errores: Record<string, string> = {};
-    if (formData.importeInicial <= 0) errores.importeInicial = "Debe ser mayor que 0";
-    if (formData.interesAnual < 0) errores.interesAnual = "No puede ser negativo";
-    if (formData.mesesRestantes <= 0) errores.mesesRestantes = "Debe ser mayor que 0";
-    if (formData.amortizacionAdicional < 0) errores.amortizacionAdicional = "No puede ser negativo";
+  const validarFormulario = useCallback((): boolean => {
+    const errores = validarDatos(formData);
     setFormErrors(errores);
     return Object.keys(errores).length === 0;
-  };
+  }, [formData]);
 
   // Función para calcular la tabla de amortización
-  const calcularAmortizacion = () => {
-    // Limpiar el timer de auto-cálculo para evitar duplicados
+  const calcularAmortizacion = useCallback(() => {
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     if (!validarFormulario()) return;
     setCalculando(true);
-    const {
-      importeInicial,
-      interesAnual,
-      mesesRestantes,
-      amortizacionAdicional,
-      tipoAmortizacion,
-      reducir,
-      mantenerPagoConstante,
-    } = formData;
-
-    let saldoPendiente = importeInicial;
-    const tabla: TablaAmortizacion[] = [];
-    let totalIntereses = 0;
-    const interesMensual = interesAnual / 100 / 12;
-
-    // Fecha de inicio: día 1 del mes actual
-    const today = new Date();
-    const startYear = today.getFullYear();
-    const startMonth = today.getMonth(); // 0-indexado: enero=0, febrero=1, etc.
-
-    // Iteramos por cada mes
-    for (let mes = 1; mes <= mesesRestantes; mes++) {
-      // Calcular la fecha para la fila actual: sumar (mes - 1) al mes de inicio
-      const currentDate = new Date(startYear, startMonth + mes - 1, 1);
-      const fecha = currentDate.toLocaleDateString("es-ES", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      });
-
-      // Determinar el valor de amortización adicional para el mes actual:
-      // Si se editó en la tabla se utiliza ese valor; de lo contrario,
-      // se usa el valor por defecto según la lógica (puntual, mensual o anual) o 0.
-      let additional = 0;
-      if (additionalValues[mes] !== undefined) {
-        additional = Number(additionalValues[mes]);
-      } else if (
-        ((formData.tipoAmortizacion === "puntual" && mes === 1) ||
-          formData.tipoAmortizacion === "mensual" ||
-          (formData.tipoAmortizacion === "anual" && mes % 12 === 0))
-      ) {
-        additional = Number(amortizacionAdicional);
-      }
-
-      // En el caso "puntual", se aplica la amortización adicional en el mes 1 antes de calcular la cuota.
-      if (tipoAmortizacion === "puntual" && mes === 1) {
-        saldoPendiente -= additional;
-      }
-
-      // Calcular la cuota. Si se reduce la cuota, se recalcula según el saldo pendiente y los meses restantes.
-      const cuotaMensual =
-        reducir === "cuota"
-          ? calcularCuotaFrances(saldoPendiente, interesAnual, mesesRestantes - mes + 1)
-          : calcularCuotaFrances(importeInicial, interesAnual, mesesRestantes);
-
-      const interesMes = saldoPendiente * interesMensual;
-      let amortizacionMes = cuotaMensual - interesMes;
-
-      if (reducir === "cuota" && mantenerPagoConstante) {
-        amortizacionMes += cuotaMensual - interesMes;
-      }
-
-      // Para los tipos "mensual" y "anual" (en su mes correspondiente), se aplica la amortización adicional
-      if (
-        (tipoAmortizacion === "mensual") ||
-        (tipoAmortizacion === "anual" && mes % 12 === 0)
-      ) {
-        saldoPendiente -= additional;
-      }
-
-      // Se actualiza el saldo pendiente tras el pago mensual
-      saldoPendiente -= amortizacionMes;
-      if (saldoPendiente < 0) saldoPendiente = 0;
-      totalIntereses += interesMes;
-
-      tabla.push({
-        mes,
-        fecha,
-        cuota: cuotaMensual.toFixed(2),
-        intereses: interesMes.toFixed(2),
-        amortizacion: amortizacionMes.toFixed(2),
-        amortizacionAdicional: Number(additional).toFixed(2),
-        saldoPendiente: saldoPendiente.toFixed(2),
-        interesesAcumulados: totalIntereses.toFixed(2),
-      });
-
-      if (saldoPendiente === 0) break;
-    }
-
+    const { tabla, totalIntereses } = generarTablaAmortizacion(
+      formData,
+      additionalValues
+    );
     setTablaAmortizacion(tabla);
     setTotalInteresesPagados(totalIntereses.toFixed(2));
     setCurrentPage(1);
     setCalculando(false);
-  };
+  }, [formData, additionalValues, validarFormulario]);
 
   // Maneja el cambio en el input de amortización adicional para cada fila (mes)
-  const handleAdditionalChange = (mes: number, value: number) => {
+  const handleAdditionalChange = useCallback((mes: number, value: number) => {
     setAdditionalValues((prev) => ({
       ...prev,
       [mes]: value,
     }));
-    // El useEffect se encargará de recalcular la tabla al actualizar additionalValues.
-  };
+  }, []);
 
   // Reiniciar formulario
-  const resetFormulario = () => {
+  const resetFormulario = useCallback(() => {
     setFormData({
       importeInicial: 100000,
       interesAnual: 3,
@@ -251,10 +146,10 @@ export default function Home() {
     setAdditionalValues({});
     setFormErrors({});
     setCurrentPage(1);
-  };
+  }, []);
 
   // Exportar a CSV
-  const exportarCSV = () => {
+  const exportarCSV = useCallback(() => {
     const encabezados = [
       "Mes,Fecha,Cuota,Intereses,Amortización,Amort. Adicional,Saldo Pendiente,Intereses Acumulados",
     ];
@@ -270,10 +165,14 @@ export default function Home() {
     link.download = `amortizacion_${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
-  };
+  }, [tablaAmortizacion]);
 
-  // Exportar a PDF
-  const exportarPDF = () => {
+  // Exportar a PDF (carga diferida de jsPDF)
+  const exportarPDF = useCallback(async () => {
+    const [jsPDF, autoTable] = await Promise.all([
+      import("jspdf").then((m) => m.default),
+      import("jspdf-autotable").then((m) => m.default),
+    ]);
     const doc = new jsPDF("landscape", "mm", "a4");
     doc.setFontSize(16);
     doc.text("Tabla de Amortización de Hipoteca", 14, 15);
@@ -315,15 +214,15 @@ export default function Home() {
     });
 
     doc.save(`amortizacion_${new Date().toISOString().slice(0, 10)}.pdf`);
-  };
+  }, [tablaAmortizacion, formData]);
 
   // Cambiar página
-  const irPagina = (pagina: number) => {
+  const irPagina = useCallback((pagina: number) => {
     if (pagina >= 1 && pagina <= totalPages) {
       setCurrentPage(pagina);
       tablaRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
-  };
+  }, [totalPages]);
 
   return (
     <motion.div
@@ -333,14 +232,12 @@ export default function Home() {
       className="min-h-screen bg-gradient-to-br from-background via-background to-emerald-50/30 dark:from-background dark:via-background dark:to-emerald-950/20 transition-colors"
     >
       <div className="container mx-auto p-4 md:p-8 max-w-6xl">
-        {/* Encabezado */}
-        <motion.div
-          initial={{ y: -10, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.5 }}
-          className="flex justify-between items-center mb-8 md:mb-10"
-        >
-          <div>
+        <header className="flex justify-between items-center mb-8 md:mb-10">
+          <motion.div
+            initial={{ y: -10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.5 }}
+          >
             <div className="h-1 w-16 bg-primary rounded-full mb-3" />
             <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground">
               Calculadora de Amortización
@@ -348,21 +245,23 @@ export default function Home() {
             <p className="text-muted-foreground text-sm mt-1">
               Simula tu hipoteca al instante — sistema francés
             </p>
-          </div>
-          <ModeToggle />
-        </motion.div>
+          </motion.div>
+          <ModeToggle aria-label="Cambiar tema" />
+        </header>
 
-        {/* Tarjeta del Formulario */}
-        <motion.div
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-          className="card-premium p-6 md:p-8 mb-8"
-        >
-          <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-            <span className="inline-block w-2 h-5 bg-primary rounded-full" />
-            Datos de la Hipoteca
-          </h2>
+        <main>
+          {/* Tarjeta del Formulario */}
+          <motion.section
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+            className="card-premium p-6 md:p-8 mb-8"
+            aria-label="Formulario de datos de la hipoteca"
+          >
+            <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
+              <span className="inline-block w-2 h-5 bg-primary rounded-full" aria-hidden="true" />
+              Datos de la Hipoteca
+            </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label className="label-form">
@@ -464,10 +363,17 @@ export default function Home() {
                 name="mantenerPagoConstante"
                 checked={formData.mantenerPagoConstante}
                 onChange={handleChange}
-                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                disabled={formData.reducir !== "cuota"}
+                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary disabled:opacity-40"
               />
-              <label htmlFor="mantenerPagoConstante" className="text-sm font-medium cursor-pointer select-none">
+              <label
+                htmlFor="mantenerPagoConstante"
+                className={`text-sm font-medium cursor-pointer select-none ${formData.reducir !== "cuota" ? "text-muted-foreground" : ""}`}
+              >
                 Mantener el pago total constante
+                {formData.reducir !== "cuota" && (
+                  <span className="block text-xs text-muted-foreground/60">Solo disponible con "Reducir cuota"</span>
+                )}
               </label>
             </div>
           </div>
@@ -507,22 +413,24 @@ export default function Home() {
               )}
             </button>
           </div>
-        </motion.div>
+        </motion.section>
 
         {/* Tabla de Resultados */}
         <AnimatePresence>
         {tablaAmortizacion.length > 0 && (
-          <motion.div
+          <motion.section
             ref={tablaRef}
             key="tabla-resultados"
             initial={{ y: 30, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ duration: 0.5, delay: 0.2 }}
             className="card-premium p-6 md:p-8"
+            aria-label="Tabla de amortización"
+            role="region"
           >
             <div className="flex flex-wrap justify-between items-center mb-5 gap-3">
               <h2 className="text-xl font-semibold flex items-center gap-2">
-                <span className="inline-block w-2 h-5 bg-primary rounded-full" />
+                <span className="inline-block w-2 h-5 bg-primary rounded-full" aria-hidden="true" />
                 Tabla de Amortización
               </h2>
               <div className="flex gap-2">
@@ -640,6 +548,7 @@ export default function Home() {
                           <button
                             onClick={() => irPagina(p)}
                             type="button"
+                            aria-current={p === currentPage ? "page" : undefined}
                             className={`text-xs font-medium rounded-md w-8 h-8 transition-colors ${
                               p === currentPage
                                 ? "bg-primary text-primary-foreground"
@@ -680,9 +589,10 @@ export default function Home() {
                 </span>
               </div>
             </motion.div>
-          </motion.div>
+            </motion.section>
         )}
         </AnimatePresence>
+        </main>
 
         {/* Footer */}
         <motion.footer
