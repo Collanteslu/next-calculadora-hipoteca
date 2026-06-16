@@ -67,7 +67,7 @@ export function useExport(
       startY: 28,
       theme: "grid",
       styles: { fontSize: 7 },
-      headStyles: { fillColor: [16, 185, 129] },
+      headStyles: { fillColor: [184, 74, 45] },
     });
 
     doc.save(`amortizacion_${new Date().toISOString().slice(0, 10)}.pdf`);

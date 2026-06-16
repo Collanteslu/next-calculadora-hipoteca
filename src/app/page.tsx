@@ -12,8 +12,10 @@ import {
 import { ModeToggle } from "@/components/ui/toggle-theme";
 import { motion, AnimatePresence } from "framer-motion";
 import type { FilaAmortizacion } from "@/lib/amortizacion";
+import { useAmortizacion } from "@/hooks/useAmortizacion";
+import { useExport } from "@/hooks/useExport";
 
-// ── Fila de tabla memoizada (evita re-renders masivos al cambiar un solo input) ──
+// ── Fila de tabla memoizada ──
 type TableRowProps = {
   fila: FilaAmortizacion;
   index: number;
@@ -60,16 +62,14 @@ const TableRow = memo(function TableRow({
       <td className="px-3 py-2.5 text-sm text-right font-mono font-medium">
         {fila.saldoPendiente}
       </td>
-      <td className="px-3 py-2.5 text-sm text-right font-mono text-emerald-600 dark:text-emerald-400 font-medium">
+      <td className="px-3 py-2.5 text-sm text-right font-mono text-amber-700 dark:text-amber-400 font-medium">
         {fila.interesesAcumulados}
       </td>
     </tr>
   );
 });
 
-import { useAmortizacion } from "@/hooks/useAmortizacion";
-import { useExport } from "@/hooks/useExport";
-
+// ── Página principal ──
 export default function Home() {
   const {
     formData,
@@ -116,7 +116,7 @@ export default function Home() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.4 }}
-      className="min-h-screen bg-gradient-to-br from-background via-background to-emerald-50/30 dark:from-background dark:via-background dark:to-emerald-950/20 transition-colors"
+      className="min-h-screen bg-gradient-to-br from-background via-background to-amber-50/20 dark:from-background dark:via-background dark:to-amber-950/15 transition-colors"
     >
       <div className="container mx-auto p-4 md:p-8 max-w-6xl">
         <header className="flex justify-between items-center mb-8 md:mb-10">
@@ -535,7 +535,7 @@ export default function Home() {
                     <span className="text-sm text-muted-foreground mr-2">
                       Total intereses pagados
                     </span>
-                    <span className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                    <span className="text-2xl font-bold text-amber-700 dark:text-amber-400">
                       {totalInteresesPagados} €
                     </span>
                   </div>

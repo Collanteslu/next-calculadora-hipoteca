@@ -2,84 +2,103 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: Arial, Helvetica, sans-serif;
-  transition: background-color 0.3s ease, color 0.3s ease;
-}
-
+/* ── Base ── */
 html {
   scroll-behavior: smooth;
 }
 
-/* Custom scrollbar */
+body {
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  transition: background-color 0.4s ease, color 0.4s ease;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Custom scrollbar ── */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground) / 0.3);
-  border-radius: 3px;
+  background: hsl(var(--muted-foreground) / 0.25);
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.5);
+  background: hsl(var(--muted-foreground) / 0.45);
 }
 
+/* ── Selection ── */
+::selection {
+  background: hsl(var(--primary) / 0.2);
+  color: hsl(var(--foreground));
+}
+
+/* ═══════════════════════════════════════════
+   PALETA — Ámbar / Terracota (cero verde, cero azul)
+   ═══════════════════════════════════════════ */
 @layer base {
   :root {
-    --background: 210 40% 96%;
-    --foreground: 222 47% 11%;
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    --primary: 160 84% 39%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 30% 92%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 210 30% 94%;
-    --muted-foreground: 215 16% 50%;
-    --accent: 160 40% 92%;
-    --accent-foreground: 160 84% 25%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214 32% 88%;
-    --input: 214 32% 88%;
-    --ring: 160 84% 39%;
-    --chart-1: 160 84% 39%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
-    --radius: 0.625rem;
+    --background: 40 30% 97%;
+    --foreground: 22 25% 12%;
+    --card: 36 30% 99%;
+    --card-foreground: 22 25% 12%;
+    --popover: 36 30% 99%;
+    --popover-foreground: 22 25% 12%;
+    --primary: 18 75% 42%;
+    --primary-foreground: 40 30% 98%;
+    --secondary: 36 20% 91%;
+    --secondary-foreground: 22 25% 15%;
+    --muted: 35 15% 93%;
+    --muted-foreground: 20 8% 45%;
+    --accent: 18 35% 90%;
+    --accent-foreground: 18 75% 30%;
+    --destructive: 0 65% 48%;
+    --destructive-foreground: 40 30% 98%;
+    --border: 30 12% 86%;
+    --input: 30 12% 86%;
+    --ring: 18 75% 42%;
+    --chart-1: 18 75% 42%;
+    --chart-2: 28 65% 52%;
+    --chart-3: 38 70% 50%;
+    --chart-4: 8 60% 55%;
+    --chart-5: 48 55% 48%;
+    --radius: 0.75rem;
+    --shadow-card: 0 1px 3px hsl(22 25% 12% / 0.04), 0 1px 2px hsl(22 25% 12% / 0.03);
+    --shadow-card-hover: 0 4px 12px hsl(22 25% 12% / 0.06), 0 2px 4px hsl(22 25% 12% / 0.04);
+    --shadow-button: 0 1px 2px hsl(18 75% 30% / 0.15);
   }
+
   .dark {
-    --background: 222 47% 9%;
-    --foreground: 210 40% 96%;
-    --card: 222 47% 13%;
-    --card-foreground: 210 40% 96%;
-    --popover: 222 47% 13%;
-    --popover-foreground: 210 40% 96%;
-    --primary: 160 84% 52%;
-    --primary-foreground: 222 47% 11%;
-    --secondary: 217 33% 18%;
-    --secondary-foreground: 210 40% 96%;
-    --muted: 217 33% 16%;
-    --muted-foreground: 215 20% 60%;
-    --accent: 160 40% 18%;
-    --accent-foreground: 160 84% 52%;
-    --destructive: 0 62% 42%;
-    --destructive-foreground: 210 40% 96%;
-    --border: 217 33% 22%;
-    --input: 217 33% 22%;
-    --ring: 160 84% 52%;
-    --chart-1: 160 84% 52%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    --background: 20 18% 6%;
+    --foreground: 36 20% 92%;
+    --card: 22 15% 10%;
+    --card-foreground: 36 20% 92%;
+    --popover: 22 15% 10%;
+    --popover-foreground: 36 20% 92%;
+    --primary: 22 75% 52%;
+    --primary-foreground: 20 18% 6%;
+    --secondary: 22 12% 15%;
+    --secondary-foreground: 36 20% 92%;
+    --muted: 20 10% 14%;
+    --muted-foreground: 30 10% 55%;
+    --accent: 18 20% 16%;
+    --accent-foreground: 22 75% 58%;
+    --destructive: 0 55% 45%;
+    --destructive-foreground: 36 20% 92%;
+    --border: 22 12% 20%;
+    --input: 22 12% 20%;
+    --ring: 22 75% 52%;
+    --chart-1: 22 75% 52%;
+    --chart-2: 28 60% 48%;
+    --chart-3: 38 60% 48%;
+    --chart-4: 8 55% 52%;
+    --chart-5: 48 50% 48%;
+    --shadow-card: 0 1px 3px hsl(0 0% 0% / 0.15), 0 1px 2px hsl(0 0% 0% / 0.1);
+    --shadow-card-hover: 0 4px 16px hsl(0 0% 0% / 0.25), 0 2px 6px hsl(0 0% 0% / 0.15);
+    --shadow-button: 0 1px 2px hsl(22 75% 40% / 0.3);
   }
 }
 
@@ -92,39 +111,186 @@ html {
   }
 }
 
+/* ═══════════════════════════════════════════
+   COMPONENTES
+   ═══════════════════════════════════════════ */
 @layer components {
   .card-premium {
-    @apply bg-card text-card-foreground rounded-xl border shadow-sm transition-shadow duration-200;
+    @apply bg-card text-card-foreground rounded-2xl border shadow-[var(--shadow-card)]
+           transition-shadow duration-300;
   }
   .card-premium:hover {
-    @apply shadow-md;
+    box-shadow: var(--shadow-card-hover);
   }
+
   .btn-primary {
-    @apply bg-primary text-primary-foreground hover:brightness-110 active:brightness-95 
-           font-medium rounded-lg px-5 py-2.5 transition-all duration-150
-           disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply bg-primary text-primary-foreground
+           font-semibold rounded-xl px-6 py-3
+           shadow-[var(--shadow-button)]
+           transition-all duration-200
+           hover:brightness-105 hover:shadow-md
+           active:brightness-95 active:scale-[0.98]
+           disabled:opacity-40 disabled:cursor-not-allowed
+           disabled:hover:brightness-100 disabled:active:scale-100;
   }
+
   .btn-secondary {
-    @apply bg-secondary text-secondary-foreground hover:bg-muted
-           font-medium rounded-lg px-5 py-2.5 transition-all duration-150
-           border;
+    @apply bg-secondary text-secondary-foreground
+           font-medium rounded-xl px-5 py-2.5
+           border border-border/60
+           transition-all duration-200
+           hover:bg-muted hover:border-border
+           active:scale-[0.98];
   }
+
   .input-field {
-    @apply w-full rounded-lg border bg-background px-3 py-2 text-sm
-           ring-offset-background placeholder:text-muted-foreground
+    @apply w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm
+           ring-offset-background placeholder:text-muted-foreground/60
            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
-           transition-colors duration-150;
+           focus-visible:border-ring/50
+           transition-all duration-150;
   }
+
   .label-form {
-    @apply block mb-1.5 text-sm font-medium text-foreground/80;
+    @apply block mb-1.5 text-sm font-semibold text-foreground/75 tracking-tight;
   }
 }
 
-/* ── Animación de filas de tabla (sustituye motion.tr de framer-motion) ── */
+/* ═══════════════════════════════════════════
+   TEMAS — Monokai · Tokyo Night · Nord · Dracula
+   ═══════════════════════════════════════════ */
+
+  /* ── Monokai ── */
+  .monokai {
+    --background: 60 8% 15%;
+    --foreground: 60 33% 96%;
+    --card: 80 5% 12%;
+    --card-foreground: 60 33% 96%;
+    --popover: 80 5% 12%;
+    --popover-foreground: 60 33% 96%;
+    --primary: 338 93% 56%;
+    --primary-foreground: 60 33% 96%;
+    --secondary: 55 11% 22%;
+    --secondary-foreground: 60 33% 96%;
+    --muted: 55 8% 26%;
+    --muted-foreground: 50 10% 60%;
+    --accent: 32 98% 56%;
+    --accent-foreground: 60 33% 96%;
+    --destructive: 338 93% 56%;
+    --destructive-foreground: 60 33% 96%;
+    --border: 55 8% 26%;
+    --input: 55 8% 26%;
+    --ring: 338 93% 56%;
+    --chart-1: 338 93% 56%;
+    --chart-2: 32 98% 56%;
+    --chart-3: 60 70% 55%;
+    --chart-4: 186 55% 50%;
+    --chart-5: 280 50% 55%;
+    --shadow-card: 0 1px 3px hsl(0 0% 0% / 0.2), 0 1px 2px hsl(0 0% 0% / 0.15);
+    --shadow-card-hover: 0 4px 16px hsl(0 0% 0% / 0.3), 0 2px 6px hsl(0 0% 0% / 0.2);
+    --shadow-button: 0 1px 2px hsl(338 93% 40% / 0.3);
+  }
+
+  /* ── Tokyo Night ── */
+  .tokyo-night {
+    --background: 235 18% 13%;
+    --foreground: 229 64% 86%;
+    --card: 231 24% 16%;
+    --card-foreground: 229 64% 86%;
+    --popover: 231 24% 16%;
+    --popover-foreground: 229 64% 86%;
+    --primary: 220 88% 73%;
+    --primary-foreground: 235 18% 13%;
+    --secondary: 230 23% 19%;
+    --secondary-foreground: 229 64% 86%;
+    --muted: 229 23% 21%;
+    --muted-foreground: 230 15% 58%;
+    --accent: 260 82% 79%;
+    --accent-foreground: 235 18% 13%;
+    --destructive: 0 60% 55%;
+    --destructive-foreground: 229 64% 86%;
+    --border: 231 22% 27%;
+    --input: 231 22% 27%;
+    --ring: 220 88% 73%;
+    --chart-1: 220 88% 73%;
+    --chart-2: 260 82% 79%;
+    --chart-3: 180 50% 60%;
+    --chart-4: 35 70% 62%;
+    --chart-5: 340 60% 65%;
+    --shadow-card: 0 1px 3px hsl(0 0% 0% / 0.2), 0 1px 2px hsl(0 0% 0% / 0.15);
+    --shadow-card-hover: 0 4px 16px hsl(0 0% 0% / 0.3), 0 2px 6px hsl(0 0% 0% / 0.2);
+    --shadow-button: 0 1px 2px hsl(220 88% 55% / 0.3);
+  }
+
+  /* ── Nord ── */
+  .nord {
+    --background: 220 16% 22%;
+    --foreground: 219 28% 88%;
+    --card: 220 16% 25%;
+    --card-foreground: 219 28% 88%;
+    --popover: 220 16% 25%;
+    --popover-foreground: 219 28% 88%;
+    --primary: 213 32% 52%;
+    --primary-foreground: 219 28% 88%;
+    --secondary: 222 16% 30%;
+    --secondary-foreground: 219 28% 88%;
+    --muted: 220 16% 32%;
+    --muted-foreground: 220 10% 62%;
+    --accent: 179 25% 65%;
+    --accent-foreground: 220 16% 22%;
+    --destructive: 0 50% 55%;
+    --destructive-foreground: 219 28% 88%;
+    --border: 218 16% 36%;
+    --input: 218 16% 36%;
+    --ring: 213 32% 52%;
+    --chart-1: 213 32% 52%;
+    --chart-2: 179 25% 65%;
+    --chart-3: 355 30% 60%;
+    --chart-4: 40 45% 65%;
+    --chart-5: 280 20% 60%;
+    --shadow-card: 0 1px 3px hsl(0 0% 0% / 0.2), 0 1px 2px hsl(0 0% 0% / 0.15);
+    --shadow-card-hover: 0 4px 16px hsl(0 0% 0% / 0.3), 0 2px 6px hsl(0 0% 0% / 0.2);
+    --shadow-button: 0 1px 2px hsl(213 32% 40% / 0.3);
+  }
+
+  /* ── Dracula ── */
+  .dracula {
+    --background: 231 15% 18%;
+    --foreground: 60 33% 96%;
+    --card: 235 14% 15%;
+    --card-foreground: 60 33% 96%;
+    --popover: 235 14% 15%;
+    --popover-foreground: 60 33% 96%;
+    --primary: 325 100% 73%;
+    --primary-foreground: 231 15% 18%;
+    --secondary: 232 14% 31%;
+    --secondary-foreground: 60 33% 96%;
+    --muted: 237 23% 28%;
+    --muted-foreground: 230 12% 58%;
+    --accent: 135 92% 65%;
+    --accent-foreground: 231 15% 18%;
+    --destructive: 0 60% 55%;
+    --destructive-foreground: 60 33% 96%;
+    --border: 232 14% 31%;
+    --input: 232 14% 31%;
+    --ring: 325 100% 73%;
+    --chart-1: 325 100% 73%;
+    --chart-2: 135 92% 65%;
+    --chart-3: 50 100% 70%;
+    --chart-4: 200 80% 65%;
+    --chart-5: 265 70% 70%;
+    --shadow-card: 0 1px 3px hsl(0 0% 0% / 0.2), 0 1px 2px hsl(0 0% 0% / 0.15);
+    --shadow-card-hover: 0 4px 16px hsl(0 0% 0% / 0.3), 0 2px 6px hsl(0 0% 0% / 0.2);
+    --shadow-button: 0 1px 2px hsl(325 100% 55% / 0.3);
+  }
+
+/* ═══════════════════════════════════════════
+   ANIMACIONES
+   ═══════════════════════════════════════════ */
 @keyframes table-row-in {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -133,6 +299,21 @@ html {
 }
 
 .table-row-animate {
-  animation: table-row-in 0.25s ease-out both;
+  animation: table-row-in 0.3s ease-out both;
 }
 
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 0%,
+    hsl(var(--muted) / 0.6) 50%,
+    hsl(var(--muted)) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+}

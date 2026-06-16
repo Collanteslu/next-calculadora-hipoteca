@@ -98,6 +98,7 @@ export default function RootLayout({
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
+          themes={["light", "dark", "monokai", "tokyo-night", "nord", "dracula"]}
           enableSystem
           disableTransitionOnChange
         >
