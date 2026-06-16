@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useCallback, memo } from "react";
+import { useRef, memo, useEffect, useMemo } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -18,35 +19,30 @@ import { useExport } from "@/hooks/useExport";
 // ── Fila de tabla memoizada ──
 type TableRowProps = {
   fila: FilaAmortizacion;
-  index: number;
   valorInput: number;
   onAdditionalChange: (mes: number, valor: number) => void;
 };
 
 const TableRow = memo(function TableRow({
   fila,
-  index,
   valorInput,
   onAdditionalChange,
 }: TableRowProps) {
   return (
-    <tr
-      className="table-row-animate hover:bg-muted/30 transition-colors"
-      style={{ animationDelay: `${index * 15}ms` }}
-    >
-      <td className="px-3 py-2.5 text-sm text-center font-medium">
+    <tr className="hover:bg-muted/30 transition-colors">
+      <td className="px-3 py-2.5 text-sm text-center font-medium tabular-nums">
         {fila.mes}
       </td>
       <td className="px-3 py-2.5 text-sm text-center text-muted-foreground">
         {fila.fecha}
       </td>
-      <td className="px-3 py-2.5 text-sm text-right font-mono">
+      <td className="px-3 py-2.5 text-sm text-right font-mono tabular-nums">
         {fila.cuota}
       </td>
-      <td className="px-3 py-2.5 text-sm text-right font-mono text-muted-foreground">
+      <td className="px-3 py-2.5 text-sm text-right font-mono text-muted-foreground tabular-nums">
         {fila.intereses}
       </td>
-      <td className="px-3 py-2.5 text-sm text-right font-mono">
+      <td className="px-3 py-2.5 text-sm text-right font-mono tabular-nums">
         {fila.amortizacion}
       </td>
       <td className="px-3 py-2.5 text-sm text-right">
@@ -59,15 +55,27 @@ const TableRow = memo(function TableRow({
           className="w-20 text-right px-2 py-1 text-sm font-mono rounded-md border bg-background focus:ring-2 focus:ring-ring focus:outline-none transition-shadow"
         />
       </td>
-      <td className="px-3 py-2.5 text-sm text-right font-mono font-medium">
+      <td className="px-3 py-2.5 text-sm text-right font-mono font-medium tabular-nums">
         {fila.saldoPendiente}
       </td>
-      <td className="px-3 py-2.5 text-sm text-right font-mono text-amber-700 dark:text-amber-400 font-medium">
+      <td className="px-3 py-2.5 text-sm text-right font-mono text-amber-700 dark:text-amber-400 font-medium tabular-nums">
         {fila.interesesAcumulados}
       </td>
     </tr>
   );
 });
+
+// ── Cabeceras de la tabla ──
+const HEADERS = [
+  "Mes",
+  "Fecha",
+  "Cuota",
+  "Intereses",
+  "Amortización",
+  "Amort. Adic.",
+  "Saldo Pend.",
+  "Int. Acum.",
+];
 
 // ── Página principal ──
 export default function Home() {
@@ -78,38 +86,51 @@ export default function Home() {
     additionalValues,
     calculando,
     formErrors,
-    currentPage,
-    pageSize,
-    pageSizeOptions,
-    paginatedData,
-    totalPages,
-    visiblePages,
     handleChange,
     handleAdditionalChange,
     calcularAmortizacion,
     resetFormulario,
-    setPageSize,
-    irPagina,
   } = useAmortizacion();
 
   const { exportarCSV, exportarPDF } = useExport(tablaAmortizacion, formData);
-  const tablaRef = useRef<HTMLDivElement>(null);
 
-  const navegarPagina = useCallback(
-    (pagina: number) => {
-      irPagina(pagina);
-      tablaRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    },
-    [irPagina]
-  );
+  // ── Virtual scroll ──
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: tablaAmortizacion.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 42,
+    overscan: 5,
+    getItemKey: (index) => tablaAmortizacion[index]?.mes ?? index,
+  });
 
-  const cambiarPageSize = useCallback(
-    (size: number) => {
-      setPageSize(size);
-      irPagina(1);
-    },
-    [setPageSize, irPagina]
-  );
+  // Calcular valorInput para cada fila (memoizado para todo el array)
+  const valoresInput = useMemo(() => {
+    const vals: Record<number, number> = {};
+    for (const fila of tablaAmortizacion) {
+      if (additionalValues[fila.mes] !== undefined) {
+        vals[fila.mes] = additionalValues[fila.mes];
+      } else if (
+        (formData.tipoAmortizacion === "puntual" && fila.mes === 1) ||
+        formData.tipoAmortizacion === "mensual" ||
+        (formData.tipoAmortizacion === "anual" && fila.mes % 12 === 0)
+      ) {
+        vals[fila.mes] = formData.amortizacionAdicional;
+      } else {
+        vals[fila.mes] = 0;
+      }
+    }
+    return vals;
+  }, [tablaAmortizacion, additionalValues, formData.tipoAmortizacion, formData.amortizacionAdicional]);
+
+  // Scroll al inicio solo cuando cambia el número de filas (no en cada recálculo)
+  const prevLength = useRef(tablaAmortizacion.length);
+  useEffect(() => {
+    if (tablaAmortizacion.length !== prevLength.current) {
+      prevLength.current = tablaAmortizacion.length;
+      rowVirtualizer.scrollToIndex(0);
+    }
+  }, [tablaAmortizacion.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <motion.div
@@ -359,11 +380,10 @@ export default function Home() {
             </div>
           </motion.section>
 
-          {/* Tabla de Resultados */}
+          {/* Tabla de Resultados — Virtual Scroll */}
           <AnimatePresence>
             {tablaAmortizacion.length > 0 && (
               <motion.section
-                ref={tablaRef}
                 key="tabla-resultados"
                 initial={{ y: 30, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
@@ -398,20 +418,16 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className="overflow-x-auto rounded-lg border">
+                {/* Contenedor con scroll virtual */}
+                <div
+                  ref={scrollRef}
+                  className="overflow-auto rounded-lg border"
+                  style={{ maxHeight: "min(600px, 70vh)" }}
+                >
                   <table className="min-w-full divide-y">
-                    <thead>
-                      <tr className="bg-muted/50">
-                        {[
-                          "Mes",
-                          "Fecha",
-                          "Cuota",
-                          "Intereses",
-                          "Amortización",
-                          "Amort. Adic.",
-                          "Saldo Pend.",
-                          "Int. Acum.",
-                        ].map((h) => (
+                    <thead className="sticky top-0 z-10">
+                      <tr className="bg-muted/80 backdrop-blur-sm">
+                        {HEADERS.map((h) => (
                           <th
                             key={h}
                             className="px-3 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center"
@@ -422,103 +438,41 @@ export default function Home() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {paginatedData.map((fila, index) => {
+                      {/* Espaciador superior */}
+                      <tr>
+                        <td
+                          colSpan={HEADERS.length}
+                          style={{ height: rowVirtualizer.getVirtualItems()[0]?.start ?? 0 }}
+                          className="p-0"
+                        />
+                      </tr>
+                      {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                        const fila = tablaAmortizacion[virtualRow.index];
                         const valorInput =
-                          additionalValues[fila.mes] !== undefined
-                            ? additionalValues[fila.mes]
-                            : (formData.tipoAmortizacion === "puntual" &&
-                                fila.mes === 1) ||
-                                formData.tipoAmortizacion === "mensual" ||
-                                (formData.tipoAmortizacion === "anual" &&
-                                  fila.mes % 12 === 0)
-                              ? formData.amortizacionAdicional
-                              : 0;
+                          valoresInput[fila.mes] ?? 0;
                         return (
                           <TableRow
-                            key={fila.mes}
+                            key={virtualRow.key}
                             fila={fila}
-                            index={index}
                             valorInput={valorInput}
                             onAdditionalChange={handleAdditionalChange}
                           />
                         );
                       })}
+                      {/* Espaciador inferior */}
+                      <tr>
+                        <td
+                          colSpan={HEADERS.length}
+                          style={{
+                            height:
+                              rowVirtualizer.getTotalSize() -
+                              (rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1]?.end ?? 0),
+                          }}
+                          className="p-0"
+                        />
+                      </tr>
                     </tbody>
                   </table>
-                </div>
-
-                {/* Paginación */}
-                <div className="flex flex-wrap justify-between items-center gap-3 mt-5">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span>Filas por página:</span>
-                    <select
-                      value={pageSize}
-                      onChange={(e) => {
-                        cambiarPageSize(Number(e.target.value));
-                      }}
-                      className="bg-background border rounded-md px-2 py-1 text-xs font-medium text-foreground focus:ring-2 focus:ring-ring focus:outline-none"
-                    >
-                      {pageSizeOptions.map((size) => (
-                        <option key={size} value={size}>
-                          {size}
-                        </option>
-                      ))}
-                      <option value={tablaAmortizacion.length}>Todas</option>
-                    </select>
-                    <span className="ml-1">
-                      {tablaAmortizacion.length} filas
-                    </span>
-                  </div>
-
-                  {totalPages > 1 && (
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => navegarPagina(currentPage - 1)}
-                        disabled={currentPage === 1}
-                        type="button"
-                        className="btn-secondary text-xs px-3 py-1.5 disabled:opacity-30"
-                      >
-                        ← Anterior
-                      </button>
-                      <div className="flex items-center gap-1.5">
-                        {visiblePages.map((p, idx, arr) => (
-                          <span
-                            key={p}
-                            className="flex items-center gap-1.5"
-                          >
-                            {idx > 0 &&
-                              arr[idx - 1] !== p - 1 && (
-                                <span className="text-xs text-muted-foreground">
-                                  ···
-                                </span>
-                              )}
-                            <button
-                              onClick={() => navegarPagina(p)}
-                              type="button"
-                              aria-current={
-                                p === currentPage ? "page" : undefined
-                              }
-                              className={`text-xs font-medium rounded-md w-8 h-8 transition-colors ${
-                                p === currentPage
-                                  ? "bg-primary text-primary-foreground"
-                                  : "hover:bg-muted text-muted-foreground"
-                              }`}
-                            >
-                              {p}
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                      <button
-                        onClick={() => navegarPagina(currentPage + 1)}
-                        disabled={currentPage === totalPages}
-                        type="button"
-                        className="btn-secondary text-xs px-3 py-1.5 disabled:opacity-30"
-                      >
-                        Siguiente →
-                      </button>
-                    </div>
-                  )}
                 </div>
 
                 {/* Total */}

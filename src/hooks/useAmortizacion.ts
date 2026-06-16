@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   generarTablaAmortizacion,
   validarDatos,
@@ -18,10 +18,7 @@ const VALORES_INICIALES: DatosAmortizacion = {
   mantenerPagoConstante: false,
 };
 
-const PAGE_SIZE_OPTIONS = [12, 24, 50, 100] as const;
-
-// ── Código inline del worker (evita depender de new URL() + bundler) ──
-// Incluye calcularCuotaFrances y generarTablaAmortizacion como funciones puras
+// ── Código inline del worker ──
 export const WORKER_CODE = `
 function calcularCuotaFrances(importe, interesAnual, meses) {
   var interesMensual = interesAnual / 100 / 12;
@@ -143,13 +140,12 @@ export function useAmortizacion() {
   const [additionalValues, setAdditionalValues] = useState<Record<number, number>>({});
   const [calculando, setCalculando] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState<number>(12);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Web Worker (Blob URL — compatible con turbopack, webpack, vite) ──
+  // ── Web Worker (Blob URL) ──
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
+  const workerTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (typeof Worker === "undefined") return;
@@ -169,41 +165,13 @@ export function useAmortizacion() {
     };
   }, []);
 
-  const paginatedData = useMemo(
-    () =>
-      tablaAmortizacion.slice(
-        (currentPage - 1) * pageSize,
-        currentPage * pageSize
-      ),
-    [tablaAmortizacion, currentPage, pageSize]
-  );
-
-  const totalPages = useMemo(
-    () => Math.max(1, Math.ceil(tablaAmortizacion.length / pageSize)),
-    [tablaAmortizacion.length, pageSize]
-  );
-
-  const visiblePages = useMemo(() => {
-    const pages: number[] = [];
-    for (let i = 1; i <= totalPages; i++) {
-      if (
-        i === 1 ||
-        i === totalPages ||
-        Math.abs(i - currentPage) <= 1
-      ) {
-        pages.push(i);
-      }
-    }
-    return pages;
-  }, [totalPages, currentPage]);
-
   const validarFormulario = useCallback((): boolean => {
     const errores = validarDatos(formData);
     setFormErrors(errores);
     return Object.keys(errores).length === 0;
   }, [formData]);
 
-  // ── Cálculo (vía Web Worker si está disponible, si no síncrono) ──
+  // ── Cálculo (Web Worker / sync fallback) ──
   const calcularAmortizacion = useCallback(() => {
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     if (!validarFormulario()) return;
@@ -215,24 +183,37 @@ export function useAmortizacion() {
     const aplicarResultado = (tabla: FilaAmortizacion[], total: number) => {
       setTablaAmortizacion(tabla);
       setTotalInteresesPagados(total.toFixed(2));
-      setCurrentPage(1);
     };
 
     if (worker) {
+      // Limpiar timeout del request anterior para evitar datos stale
+      if (workerTimeoutRef.current) clearTimeout(workerTimeoutRef.current);
+
+      // Timeout de seguridad: si el worker no responde en 5s, fallback síncrono
+      workerTimeoutRef.current = setTimeout(() => {
+        console.warn("Worker timeout — usando cálculo síncrono");
+        const { tabla, totalIntereses } = generarTablaAmortizacion(
+          formData,
+          additionalValues
+        );
+        aplicarResultado(tabla, totalIntereses);
+        setCalculando(false);
+      }, 5000);
+
       worker.onmessage = (e: MessageEvent) => {
         if (e.data.id !== requestId) return;
-
+        if (workerTimeoutRef.current) clearTimeout(workerTimeoutRef.current);
         if (e.data.error) {
           console.error("Error en worker:", e.data.error);
           setCalculando(false);
           return;
         }
-
         aplicarResultado(e.data.result.tabla, e.data.result.totalIntereses);
         setCalculando(false);
       };
 
       worker.onerror = () => {
+        if (workerTimeoutRef.current) clearTimeout(workerTimeoutRef.current);
         const { tabla, totalIntereses } = generarTablaAmortizacion(
           formData,
           additionalValues
@@ -256,7 +237,6 @@ export function useAmortizacion() {
     }
   }, [formData, additionalValues, validarFormulario]);
 
-  // Auto-calcular con debounce
   useEffect(() => {
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(() => {
@@ -308,17 +288,7 @@ export function useAmortizacion() {
     setTotalInteresesPagados("0");
     setAdditionalValues({});
     setFormErrors({});
-    setCurrentPage(1);
   }, []);
-
-  const irPagina = useCallback(
-    (pagina: number) => {
-      if (pagina >= 1 && pagina <= totalPages) {
-        setCurrentPage(pagina);
-      }
-    },
-    [totalPages]
-  );
 
   return {
     formData,
@@ -327,18 +297,9 @@ export function useAmortizacion() {
     additionalValues,
     calculando,
     formErrors,
-    currentPage,
-    pageSize,
-    pageSizeOptions: PAGE_SIZE_OPTIONS,
-    paginatedData,
-    totalPages,
     handleChange,
     handleAdditionalChange,
-    validarFormulario,
     calcularAmortizacion,
     resetFormulario,
-    setPageSize,
-    irPagina,
-    visiblePages,
   };
 }
