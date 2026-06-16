@@ -151,3 +151,130 @@ describe("useAmortizacion — integración con Web Worker", () => {
     expect(result.current.totalInteresesPagados).toBe("0");
   });
 });
+
+// ── Tests de modoCalculo ──
+describe("useAmortizacion — estado modoCalculo", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    teardownWorker();
+  });
+
+  it("inicia en 'idle'", () => {
+    const { result } = renderHook(() => useAmortizacion());
+    expect(result.current.modoCalculo).toBe("idle");
+  });
+
+  it("cambia a 'idle' al iniciar un nuevo cálculo", () => {
+    setupWorker();
+    const { result } = renderHook(() => useAmortizacion());
+
+    // Primero hacemos un cálculo por worker
+    act(() => {
+      result.current.calcularAmortizacion();
+    });
+    act(() => {
+      workerInstance!.onmessage!({
+        data: { id: 1, result: { tabla: [], totalIntereses: 0 } },
+      } as MessageEvent);
+    });
+    expect(result.current.modoCalculo).toBe("worker");
+
+    // Al iniciar otro cálculo, vuelve a idle
+    act(() => {
+      result.current.calcularAmortizacion();
+    });
+    expect(result.current.modoCalculo).toBe("idle");
+  });
+
+  it("cambia a 'worker' cuando el worker responde exitosamente", () => {
+    setupWorker();
+    const { result } = renderHook(() => useAmortizacion());
+
+    act(() => {
+      result.current.calcularAmortizacion();
+    });
+
+    expect(result.current.modoCalculo).toBe("idle"); // idle durante el cálculo
+
+    act(() => {
+      workerInstance!.onmessage!({
+        data: { id: 1, result: { tabla: [], totalIntereses: 0 } },
+      } as MessageEvent);
+    });
+
+    expect(result.current.modoCalculo).toBe("worker");
+  });
+
+  it("cambia a 'sync' cuando no hay Worker disponible", () => {
+    delete (globalThis as Record<string, unknown>).Worker;
+
+    const { result } = renderHook(() => useAmortizacion());
+
+    act(() => {
+      result.current.calcularAmortizacion();
+    });
+
+    expect(result.current.modoCalculo).toBe("sync");
+  });
+
+  it("cambia a 'sync' cuando el worker emite onerror", () => {
+    setupWorker();
+    const { result } = renderHook(() => useAmortizacion());
+
+    act(() => {
+      result.current.calcularAmortizacion();
+    });
+
+    act(() => {
+      workerInstance!.onerror!(new Event("error"));
+    });
+
+    expect(result.current.modoCalculo).toBe("sync");
+    expect(result.current.tablaAmortizacion).toHaveLength(120); // fallback síncrono
+    expect(result.current.calculando).toBe(false);
+  });
+
+  it("cambia a 'sync' cuando el worker timeout se dispara", () => {
+    setupWorker();
+    const { result } = renderHook(() => useAmortizacion());
+
+    act(() => {
+      result.current.calcularAmortizacion();
+    });
+
+    expect(result.current.modoCalculo).toBe("idle");
+
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+
+    expect(result.current.modoCalculo).toBe("sync");
+    expect(result.current.tablaAmortizacion).toHaveLength(120);
+    expect(result.current.calculando).toBe(false);
+  });
+
+  it("vuelve a 'idle' al hacer reset del formulario", () => {
+    setupWorker();
+    const { result } = renderHook(() => useAmortizacion());
+
+    act(() => {
+      result.current.calcularAmortizacion();
+    });
+    act(() => {
+      workerInstance!.onmessage!({
+        data: { id: 1, result: { tabla: [], totalIntereses: 0 } },
+      } as MessageEvent);
+    });
+    expect(result.current.modoCalculo).toBe("worker");
+
+    act(() => {
+      result.current.resetFormulario();
+    });
+
+    expect(result.current.modoCalculo).toBe("idle");
+  });
+});

@@ -3,15 +3,6 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
 
-  experimental: {
-    optimizePackageImports: [
-      "framer-motion",
-      "lucide-react",
-      "@radix-ui/react-dropdown-menu",
-      "@radix-ui/react-select",
-    ],
-  },
-
   async headers() {
     return [
       {

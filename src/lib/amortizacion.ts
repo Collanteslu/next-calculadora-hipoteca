@@ -65,10 +65,9 @@ export function generarTablaAmortizacion(
   let totalIntereses = 0;
   const interesMensual = interesAnual / 100 / 12;
 
-  // Fecha de inicio
-  const today = fechaReferencia ?? new Date();
-  const startYear = today.getFullYear();
-  const startMonth = today.getMonth();
+  // Fecha de inicio — se muta en el bucle vía setMonth() para evitar GC
+  const currentDate = fechaReferencia ? new Date(fechaReferencia) : new Date();
+  currentDate.setDate(1);
 
   // Cuota original (sin reducciones) para "mantener pago constante"
   const cuotaOriginal = reducir === "plazo"
@@ -77,23 +76,21 @@ export function generarTablaAmortizacion(
 
   for (let mes = 1; mes <= mesesRestantes; mes++) {
     // Formato manual de fecha — evita el coste de Intl.DateTimeFormat por fila
-    const currentDate = new Date(startYear, startMonth + mes - 1, 1);
     const d = String(currentDate.getDate()).padStart(2, "0");
     const m = String(currentDate.getMonth() + 1).padStart(2, "0");
     const a = currentDate.getFullYear();
     const fecha = `${d}/${m}/${a}`;
+    currentDate.setMonth(currentDate.getMonth() + 1);
 
     // Determinar el valor adicional para este mes
-    let additional = 0;
-    if (additionalValues[mes] !== undefined) {
-      additional = Number(additionalValues[mes]);
-    } else if (
-      (tipoAmortizacion === "puntual" && mes === 1) ||
-      tipoAmortizacion === "mensual" ||
-      (tipoAmortizacion === "anual" && mes % 12 === 0)
-    ) {
-      additional = Number(amortizacionAdicional);
-    }
+    const additional =
+      additionalValues[mes] !== undefined
+        ? additionalValues[mes]
+        : (tipoAmortizacion === "puntual" && mes === 1) ||
+          tipoAmortizacion === "mensual" ||
+          (tipoAmortizacion === "anual" && mes % 12 === 0)
+          ? amortizacionAdicional
+          : 0;
 
     // Aplicar adicional para "puntual" ANTES de calcular la cuota
     if (tipoAmortizacion === "puntual" && mes === 1) {
@@ -133,7 +130,7 @@ export function generarTablaAmortizacion(
       cuota: cuotaMensual.toFixed(2),
       intereses: interesMes.toFixed(2),
       amortizacion: amortizacionMes.toFixed(2),
-      amortizacionAdicional: Number(additional).toFixed(2),
+      amortizacionAdicional: additional.toFixed(2),
       saldoPendiente: saldoPendiente.toFixed(2),
       interesesAcumulados: totalIntereses.toFixed(2),
     });

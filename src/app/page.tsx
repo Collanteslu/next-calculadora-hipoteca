@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { ModeToggle } from "@/components/ui/toggle-theme";
 import { motion, AnimatePresence } from "framer-motion";
+import { Cpu, AlertCircle, Loader2, RefreshCw } from "lucide-react";
 import type { FilaAmortizacion } from "@/lib/amortizacion";
 import { useAmortizacion } from "@/hooks/useAmortizacion";
 import { useExport } from "@/hooks/useExport";
@@ -52,6 +53,7 @@ const TableRow = memo(function TableRow({
           onChange={(e) =>
             onAdditionalChange(fila.mes, Number(e.target.value))
           }
+          aria-label={`Amortización adicional mes ${fila.mes}`}
           className="w-20 text-right px-2 py-1 text-sm font-mono rounded-md border bg-background focus:ring-2 focus:ring-ring focus:outline-none transition-shadow"
         />
       </td>
@@ -90,6 +92,7 @@ export default function Home() {
     handleAdditionalChange,
     calcularAmortizacion,
     resetFormulario,
+    modoCalculo,
   } = useAmortizacion();
 
   const { exportarCSV, exportarPDF } = useExport(tablaAmortizacion, formData);
@@ -247,7 +250,7 @@ export default function Home() {
                 )}
               </div>
               <div>
-                <label className="label-form">Tipo de Amortización</label>
+                <label className="label-form" htmlFor="tipoAmortizacion">Tipo de Amortización</label>
                 <Select
                   name="tipoAmortizacion"
                   value={formData.tipoAmortizacion}
@@ -257,7 +260,7 @@ export default function Home() {
                     })
                   }
                 >
-                  <SelectTrigger className="input-field">
+                  <SelectTrigger id="tipoAmortizacion" className="input-field">
                     <SelectValue placeholder="Selecciona..." />
                   </SelectTrigger>
                   <SelectContent>
@@ -268,7 +271,7 @@ export default function Home() {
                 </Select>
               </div>
               <div>
-                <label className="label-form">Reducir</label>
+                <label className="label-form" htmlFor="reducir">Reducir</label>
                 <Select
                   name="reducir"
                   value={formData.reducir}
@@ -276,7 +279,7 @@ export default function Home() {
                     handleChange({ target: { name: "reducir", value } })
                   }
                 >
-                  <SelectTrigger className="input-field">
+                  <SelectTrigger id="reducir" className="input-field">
                     <SelectValue placeholder="Selecciona..." />
                   </SelectTrigger>
                   <SelectContent>
@@ -322,8 +325,26 @@ export default function Home() {
                   Reiniciar
                 </button>
                 {tablaAmortizacion.length > 0 && (
-                  <span className="text-xs text-muted-foreground hidden sm:inline">
-                    {calculando ? "Calculando…" : "Actualizado ⏎"}
+                  <span className="text-xs text-muted-foreground inline-flex items-center gap-2">
+                    <span className="hidden sm:inline">{calculando ? "Calculando…" : "Actualizado ⏎"}</span>
+                    {modoCalculo === "worker" && (
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                        title="Cálculo ejecutado en Web Worker (hilo separado)"
+                      >
+                        <Cpu className="h-2.5 w-2.5" />
+                        Worker
+                      </span>
+                    )}
+                    {modoCalculo === "sync" && (
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                        title="Cálculo síncrono (hilo principal). El worker no está disponible."
+                      >
+                        <AlertCircle className="h-2.5 w-2.5" />
+                        Síncrono
+                      </span>
+                    )}
                   </span>
                 )}
               </div>
@@ -335,42 +356,12 @@ export default function Home() {
               >
                 {calculando ? (
                   <span className="flex items-center gap-2">
-                    <svg
-                      className="animate-spin h-4 w-4"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                      />
-                    </svg>
+                    <Loader2 className="animate-spin h-4 w-4" />
                     Calculando…
                   </span>
                 ) : (
                   <span className="flex items-center gap-2">
-                    <svg
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <polyline points="23 4 23 10 17 10" />
-                      <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-                    </svg>
+                    <RefreshCw className="h-4 w-4" />
                     {tablaAmortizacion.length > 0
                       ? "Actualizar"
                       : "Calcular"}

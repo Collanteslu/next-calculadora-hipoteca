@@ -18,7 +18,7 @@ const VALORES_INICIALES: DatosAmortizacion = {
   mantenerPagoConstante: false,
 };
 
-// ── Código inline del worker ──
+// ── Código inline del worker (JS vanilla para evitar dependencias de bundler) ──
 export const WORKER_CODE = `
 function calcularCuotaFrances(importe, interesAnual, meses) {
   var interesMensual = interesAnual / 100 / 12;
@@ -26,7 +26,7 @@ function calcularCuotaFrances(importe, interesAnual, meses) {
   return (importe * interesMensual) / (1 - Math.pow(1 + interesMensual, -meses));
 }
 
-function generarTablaAmortizacion(datos, additionalValues, fechaReferencia) {
+function generarTablaAmortizacion(datos, additionalValues) {
   var importeInicial = datos.importeInicial;
   var interesAnual = datos.interesAnual;
   var mesesRestantes = datos.mesesRestantes;
@@ -38,29 +38,27 @@ function generarTablaAmortizacion(datos, additionalValues, fechaReferencia) {
   var tabla = [];
   var totalIntereses = 0;
   var interesMensual = interesAnual / 100 / 12;
-  var today = fechaReferencia ? new Date(fechaReferencia) : new Date();
-  var startYear = today.getFullYear();
-  var startMonth = today.getMonth();
+  var currentDate = new Date();
+  currentDate.setDate(1);
   var cuotaOriginal = reducir === "plazo"
     ? calcularCuotaFrances(importeInicial, interesAnual, mesesRestantes)
     : null;
 
   for (var mes = 1; mes <= mesesRestantes; mes++) {
-    var currentDate = new Date(startYear, startMonth + mes - 1, 1);
     var d = String(currentDate.getDate()).padStart(2, "0");
     var m = String(currentDate.getMonth() + 1).padStart(2, "0");
     var a = currentDate.getFullYear();
     var fecha = d + "/" + m + "/" + a;
-    var additional = 0;
-    if (additionalValues[mes] !== undefined) {
-      additional = Number(additionalValues[mes]);
-    } else if (
-      (tipoAmortizacion === "puntual" && mes === 1) ||
-      tipoAmortizacion === "mensual" ||
-      (tipoAmortizacion === "anual" && mes % 12 === 0)
-    ) {
-      additional = Number(amortizacionAdicional);
-    }
+    currentDate.setMonth(currentDate.getMonth() + 1);
+
+    var additional =
+      additionalValues[mes] !== undefined
+        ? additionalValues[mes]
+        : (tipoAmortizacion === "puntual" && mes === 1) ||
+          tipoAmortizacion === "mensual" ||
+          (tipoAmortizacion === "anual" && mes % 12 === 0)
+          ? amortizacionAdicional
+          : 0;
 
     if (tipoAmortizacion === "puntual" && mes === 1) {
       saldoPendiente -= additional;
@@ -94,7 +92,7 @@ function generarTablaAmortizacion(datos, additionalValues, fechaReferencia) {
       cuota: cuotaMensual.toFixed(2),
       intereses: interesMes.toFixed(2),
       amortizacion: amortizacionMes.toFixed(2),
-      amortizacionAdicional: Number(additional).toFixed(2),
+      amortizacionAdicional: additional.toFixed(2),
       saldoPendiente: saldoPendiente.toFixed(2),
       interesesAcumulados: totalIntereses.toFixed(2),
     });
@@ -139,26 +137,24 @@ export function useAmortizacion() {
   const [totalInteresesPagados, setTotalInteresesPagados] = useState("0");
   const [additionalValues, setAdditionalValues] = useState<Record<number, number>>({});
   const [calculando, setCalculando] = useState(false);
+  const [modoCalculo, setModoCalculo] = useState<"idle" | "worker" | "sync">("idle");
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Web Worker (Blob URL) ──
+  // ── Web Worker (Blob URL — compatible con turbopack) ──
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
   const workerTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (typeof Worker === "undefined") return;
-
     const url = getWorkerUrl();
     if (!url) return;
-
     try {
       workerRef.current = new Worker(url);
     } catch {
       workerRef.current = null;
     }
-
     return () => {
       workerRef.current?.terminate();
       workerRef.current = null;
@@ -171,25 +167,27 @@ export function useAmortizacion() {
     return Object.keys(errores).length === 0;
   }, [formData]);
 
+  const aplicarResultado = useCallback(
+    (tabla: FilaAmortizacion[], total: number) => {
+      setTablaAmortizacion(tabla);
+      setTotalInteresesPagados(total.toFixed(2));
+    },
+    []
+  );
+
   // ── Cálculo (Web Worker / sync fallback) ──
   const calcularAmortizacion = useCallback(() => {
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     if (!validarFormulario()) return;
     setCalculando(true);
+    setModoCalculo("idle");
 
     const worker = workerRef.current;
     const requestId = ++requestIdRef.current;
 
-    const aplicarResultado = (tabla: FilaAmortizacion[], total: number) => {
-      setTablaAmortizacion(tabla);
-      setTotalInteresesPagados(total.toFixed(2));
-    };
-
     if (worker) {
-      // Limpiar timeout del request anterior para evitar datos stale
       if (workerTimeoutRef.current) clearTimeout(workerTimeoutRef.current);
 
-      // Timeout de seguridad: si el worker no responde en 5s, fallback síncrono
       workerTimeoutRef.current = setTimeout(() => {
         console.warn("Worker timeout — usando cálculo síncrono");
         const { tabla, totalIntereses } = generarTablaAmortizacion(
@@ -197,6 +195,7 @@ export function useAmortizacion() {
           additionalValues
         );
         aplicarResultado(tabla, totalIntereses);
+        setModoCalculo("sync");
         setCalculando(false);
       }, 5000);
 
@@ -209,6 +208,7 @@ export function useAmortizacion() {
           return;
         }
         aplicarResultado(e.data.result.tabla, e.data.result.totalIntereses);
+        setModoCalculo("worker");
         setCalculando(false);
       };
 
@@ -219,24 +219,23 @@ export function useAmortizacion() {
           additionalValues
         );
         aplicarResultado(tabla, totalIntereses);
+        setModoCalculo("sync");
         setCalculando(false);
       };
 
-      worker.postMessage({
-        id: requestId,
-        datos: formData,
-        additionalValues,
-      });
+      worker.postMessage({ id: requestId, datos: formData, additionalValues });
     } else {
       const { tabla, totalIntereses } = generarTablaAmortizacion(
         formData,
         additionalValues
       );
       aplicarResultado(tabla, totalIntereses);
+      setModoCalculo("sync");
       setCalculando(false);
     }
-  }, [formData, additionalValues, validarFormulario]);
+  }, [formData, additionalValues, validarFormulario, aplicarResultado]);
 
+  // ── Debounce ──
   useEffect(() => {
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(() => {
@@ -245,8 +244,7 @@ export function useAmortizacion() {
     return () => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formData, additionalValues]);
+  }, [calcularAmortizacion]);
 
   const handleChange = useCallback(
     (
@@ -288,6 +286,7 @@ export function useAmortizacion() {
     setTotalInteresesPagados("0");
     setAdditionalValues({});
     setFormErrors({});
+    setModoCalculo("idle");
   }, []);
 
   return {
@@ -301,5 +300,6 @@ export function useAmortizacion() {
     handleAdditionalChange,
     calcularAmortizacion,
     resetFormulario,
+    modoCalculo,
   };
 }
