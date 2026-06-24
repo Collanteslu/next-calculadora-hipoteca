@@ -77,6 +77,26 @@ describe("useAmortizacion — integración con Web Worker", () => {
     expect(payload.datos.importeInicial).toBe(100000);
   });
 
+  it("envía al worker los campos numéricos como number (protege a un worker stale)", () => {
+    setupWorker();
+    const { result } = renderHook(() => useAmortizacion());
+
+    act(() => {
+      result.current.handleChange({
+        target: { name: "amortizacionAdicional", value: "500", type: "number" },
+      } as unknown as Parameters<typeof result.current.handleChange>[0]);
+    });
+
+    act(() => {
+      result.current.calcularAmortizacion();
+    });
+
+    const payload = workerInstance!.postMessage.mock.calls.at(-1)![0];
+    expect(typeof payload.datos.amortizacionAdicional).toBe("number");
+    expect(payload.datos.amortizacionAdicional).toBe(500);
+    expect(typeof payload.datos.importeInicial).toBe("number");
+  });
+
   it("actualiza el estado cuando el worker responde correctamente", () => {
     setupWorker();
     const { result } = renderHook(() => useAmortizacion());
@@ -125,6 +145,44 @@ describe("useAmortizacion — integración con Web Worker", () => {
     });
 
     expect(result.current.totalInteresesPagados).toBe("0");
+  });
+
+  it("convierte a número los campos numéricos editados (no deja strings en formData)", () => {
+    delete (globalThis as Record<string, unknown>).Worker;
+
+    const { result } = renderHook(() => useAmortizacion());
+
+    // El input type="number" entrega siempre un string en target.value
+    act(() => {
+      result.current.handleChange({
+        target: { name: "amortizacionAdicional", value: "500", type: "number" },
+      } as unknown as Parameters<typeof result.current.handleChange>[0]);
+    });
+
+    expect(typeof result.current.formData.amortizacionAdicional).toBe("number");
+    expect(result.current.formData.amortizacionAdicional).toBe(500);
+  });
+
+  it("no lanza error al calcular tras insertar una amortización adicional por defecto (string del input)", () => {
+    delete (globalThis as Record<string, unknown>).Worker;
+
+    const { result } = renderHook(() => useAmortizacion());
+
+    act(() => {
+      result.current.handleChange({
+        target: { name: "amortizacionAdicional", value: "500", type: "number" },
+      } as unknown as Parameters<typeof result.current.handleChange>[0]);
+    });
+
+    // Antes del fix esto lanzaba "additional.toFixed is not a function"
+    expect(() => {
+      act(() => {
+        result.current.calcularAmortizacion();
+      });
+    }).not.toThrow();
+
+    expect(result.current.tablaAmortizacion.length).toBeGreaterThan(0);
+    expect(result.current.tablaAmortizacion[0].amortizacionAdicional).toBe("500.00");
   });
 
   it("resetea el formulario correctamente", () => {

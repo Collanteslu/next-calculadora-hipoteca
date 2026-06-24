@@ -8,6 +8,28 @@ import {
   type FilaAmortizacion,
 } from "@/lib/amortizacion";
 
+// Campos del formulario que deben almacenarse como número (los <input type="number">
+// entregan siempre un string en target.value, así que hay que convertirlos).
+const CAMPOS_NUMERICOS = new Set<keyof DatosAmortizacion>([
+  "importeInicial",
+  "interesAnual",
+  "mesesRestantes",
+  "amortizacionAdicional",
+]);
+
+// Normaliza los campos numéricos a number antes de calcular. Garantiza que el
+// worker (incluso una instancia stale de HMR sin la guarda) y el cálculo
+// síncrono nunca reciban strings, evitando "additional.toFixed is not a function".
+function normalizarDatos(datos: DatosAmortizacion): DatosAmortizacion {
+  return {
+    ...datos,
+    importeInicial: Number(datos.importeInicial) || 0,
+    interesAnual: Number(datos.interesAnual) || 0,
+    mesesRestantes: Number(datos.mesesRestantes) || 0,
+    amortizacionAdicional: Number(datos.amortizacionAdicional) || 0,
+  };
+}
+
 const VALORES_INICIALES: DatosAmortizacion = {
   importeInicial: 100000,
   interesAnual: 3,
@@ -51,7 +73,7 @@ function generarTablaAmortizacion(datos, additionalValues) {
     var fecha = d + "/" + m + "/" + a;
     currentDate.setMonth(currentDate.getMonth() + 1);
 
-    var additional =
+    var rawAdditional =
       additionalValues[mes] !== undefined
         ? additionalValues[mes]
         : (tipoAmortizacion === "puntual" && mes === 1) ||
@@ -59,6 +81,8 @@ function generarTablaAmortizacion(datos, additionalValues) {
           (tipoAmortizacion === "anual" && mes % 12 === 0)
           ? amortizacionAdicional
           : 0;
+    // Forzar conversión a número para evitar errores de tipo en el worker
+    var additional = Number(rawAdditional) || 0;
 
     if (tipoAmortizacion === "puntual" && mes === 1) {
       saldoPendiente -= additional;
@@ -184,6 +208,8 @@ export function useAmortizacion() {
 
     const worker = workerRef.current;
     const requestId = ++requestIdRef.current;
+    // Datos saneados: número garantizado en campos numéricos.
+    const datos = normalizarDatos(formData);
 
     if (worker) {
       if (workerTimeoutRef.current) clearTimeout(workerTimeoutRef.current);
@@ -191,7 +217,7 @@ export function useAmortizacion() {
       workerTimeoutRef.current = setTimeout(() => {
         console.warn("Worker timeout — usando cálculo síncrono");
         const { tabla, totalIntereses } = generarTablaAmortizacion(
-          formData,
+          datos,
           additionalValues
         );
         aplicarResultado(tabla, totalIntereses);
@@ -215,7 +241,7 @@ export function useAmortizacion() {
       worker.onerror = () => {
         if (workerTimeoutRef.current) clearTimeout(workerTimeoutRef.current);
         const { tabla, totalIntereses } = generarTablaAmortizacion(
-          formData,
+          datos,
           additionalValues
         );
         aplicarResultado(tabla, totalIntereses);
@@ -223,10 +249,10 @@ export function useAmortizacion() {
         setCalculando(false);
       };
 
-      worker.postMessage({ id: requestId, datos: formData, additionalValues });
+      worker.postMessage({ id: requestId, datos, additionalValues });
     } else {
       const { tabla, totalIntereses } = generarTablaAmortizacion(
-        formData,
+        datos,
         additionalValues
       );
       aplicarResultado(tabla, totalIntereses);
@@ -253,11 +279,17 @@ export function useAmortizacion() {
         | { target: { name: string; value: string | number | boolean } }
     ) => {
       const target = event.target as HTMLInputElement | HTMLSelectElement;
-      const value =
+      const { name } = target;
+      let value: string | number | boolean =
         target.type === "checkbox"
           ? (target as HTMLInputElement).checked
           : target.value;
-      const { name } = target;
+
+      // Convertir a número los campos numéricos: el input devuelve string y el
+      // cálculo (worker y síncrono) espera number. "" se trata como 0.
+      if (CAMPOS_NUMERICOS.has(name as keyof DatosAmortizacion) && typeof value === "string") {
+        value = value === "" ? 0 : Number(value);
+      }
 
       setFormErrors((prev) => {
         const nuevo = { ...prev };

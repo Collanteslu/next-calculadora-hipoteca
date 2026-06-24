@@ -83,7 +83,7 @@ export function generarTablaAmortizacion(
     currentDate.setMonth(currentDate.getMonth() + 1);
 
     // Determinar el valor adicional para este mes
-    const additional =
+    const rawAdditional =
       additionalValues[mes] !== undefined
         ? additionalValues[mes]
         : (tipoAmortizacion === "puntual" && mes === 1) ||
@@ -91,6 +91,8 @@ export function generarTablaAmortizacion(
           (tipoAmortizacion === "anual" && mes % 12 === 0)
           ? amortizacionAdicional
           : 0;
+    // Forzar número: los inputs pueden entregar strings y .toFixed() fallaría.
+    const additional = Number(rawAdditional) || 0;
 
     // Aplicar adicional para "puntual" ANTES de calcular la cuota
     if (tipoAmortizacion === "puntual" && mes === 1) {
